@@ -1,0 +1,74 @@
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
+const { Client, LocalAuth } = require("whatsapp-web.js");
+const ElevenLabs = require("elevenlabs-node");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json());
+
+// Inicializando o cliente do WhatsApp Web
+const client = new Client({
+  authStrategy: new LocalAuth(),
+});
+
+client.on("qr", (qr) => {
+  console.log("QR Code recebido! Escaneie no WhatsApp.");
+});
+
+client.on("ready", () => {
+  console.log("WhatsApp Web conectado!");
+});
+
+client.initialize();
+
+// Configurando ElevenLabs
+const elevenlabs = new ElevenLabs({
+  apiKey: process.env.ELEVENLABS_API_KEY, // Defina sua chave no Railway
+});
+
+// Rota para testar o servidor
+app.get("/ping", (req, res) => {
+  res.json({ message: "Servidor rodando!" });
+});
+
+// Rota para enviar mensagens no WhatsApp
+app.post("/send-message", async (req, res) => {
+  const { number, message } = req.body;
+
+  if (!number || !message) {
+    return res.status(400).json({ error: "Número e mensagem são obrigatórios!" });
+  }
+
+  try {
+    await client.sendMessage(`${number}@c.us`, message);
+    res.json({ success: true, message: "Mensagem enviada!" });
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao enviar mensagem no WhatsApp" });
+  }
+});
+
+// Rota para gerar áudio com ElevenLabs
+app.post("/generate-audio", async (req, res) => {
+  const { text, voice_id } = req.body;
+
+  if (!text || !voice_id) {
+    return res.status(400).json({ error: "Texto e ID da voz são obrigatórios!" });
+  }
+
+  try {
+    const audioBuffer = await elevenlabs.textToSpeech({ text, voice_id });
+    res.set("Content-Type", "audio/mpeg");
+    res.send(audioBuffer);
+  } catch (error) {
+    res.status(500).json({ error: "Erro ao gerar áudio com ElevenLabs" });
+  }
+});
+
+// Iniciando o servidor
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
